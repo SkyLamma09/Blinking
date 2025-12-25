@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
 <style>
+/* ... (styles unchanged except for a few added sections) ... */
 :root{
   --bg:#0b0e14;
   --panel:#141824;
@@ -18,142 +19,34 @@
   --warn:#ff9a9a;
   --text:#e6e8ff;
   --muted:#9aa3c7;
+  --info:#6bcfff;
 }
 
 *{box-sizing:border-box}
-
-body{
-  margin:0;
-  background:linear-gradient(180deg,#0b0e14,#0f1320);
-  color:var(--text);
-  font-family:system-ui,-apple-system,Segoe UI,Roboto;
-}
-
-header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:12px 20px;
-  background:rgba(20,24,36,.9);
-  backdrop-filter:blur(8px);
-  border-bottom:1px solid #22284a;
-}
-
-.nav{
-  display:flex;
-  gap:10px;
-}
-
-button{
-  background:var(--panel-soft);
-  border:1px solid #2a2f55;
-  color:var(--text);
-  padding:10px 16px;
-  border-radius:10px;
-  cursor:pointer;
-  font-size:14px;
-}
-
+body{margin:0;background:linear-gradient(180deg,#0b0e14,#0f1320);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:rgba(20,24,36,.9);backdrop-filter:blur(8px);border-bottom:1px solid #22284a}
+.nav{display:flex;gap:10px}
+button{background:var(--panel-soft);border:1px solid #2a2f55;color:var(--text);padding:10px 16px;border-radius:10px;cursor:pointer;font-size:14px}
 button.active{background:var(--accent)}
 button.hold{background:var(--accent-2)}
-
-main{
-  padding:20px;
-  display:grid;
-  place-items:center;
-}
-
+main{padding:20px;display:grid;place-items:center}
 section{display:none;max-width:900px;width:100%}
 section.active{display:block}
-
-.card{
-  background:var(--panel);
-  border:1px solid #242a52;
-  border-radius:16px;
-  padding:16px;
-  box-shadow:0 20px 50px rgba(0,0,0,.35);
-}
-
-.video-wrap{
-  display:grid;
-  grid-template-columns:640px 1fr;
-  gap:16px;
-}
-
-video{
-  border-radius:16px;
-  background:#000;
-}
-
-.metrics{
-  display:grid;
-  gap:12px;
-}
-
-.metric{
-  background:var(--panel-soft);
-  border-radius:12px;
-  padding:12px;
-}
-
-.metric .label{
-  color:var(--muted);
-  font-size:13px;
-}
-
-.metric .value{
-  font-size:26px;
-  margin-top:4px;
-}
-
+.card{background:var(--panel);border:1px solid #242a52;border-radius:16px;padding:16px;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.video-wrap{display:grid;grid-template-columns:640px 1fr;gap:16px}
+video{border-radius:16px;background:#000}
+.metrics{display:grid;gap:12px}
+.metric{background:var(--panel-soft);border-radius:12px;padding:12px}
+.metric .label{color:var(--muted);font-size:13px}
+.metric .value{font-size:26px;margin-top:4px}
 .good{color:var(--good)}
 .warn{color:var(--warn)}
-
-.status{
-  margin-top:8px;
-  font-size:14px;
-  color:var(--muted);
-}
-
-canvas{
-  background:var(--panel);
-  border-radius:16px;
-  border:1px solid #242a52;
-}
-
-/* === DISCLAIMER MODAL === */
-#disclaimerOverlay{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.65);
-  display:none;
-  align-items:center;
-  justify-content:center;
-  z-index:9999;
-}
-
-#disclaimerBox{
-  background:var(--panel);
-  border:1px solid #242a52;
-  border-radius:16px;
-  padding:24px;
-  max-width:520px;
-  box-shadow:0 30px 80px rgba(0,0,0,.6);
-}
-
-#disclaimerBox h3{
-  margin-top:0;
-  color:var(--warn);
-}
-
-#disclaimerBox p{
-  line-height:1.5;
-}
-
-#disclaimerBox button{
-  margin-top:16px;
-  width:100%;
-}
+.info{color:var(--info)}
+.status{margin-top:8px;font-size:14px;color:var(--muted)}
+canvas{background:var(--panel);border-radius:16px;border:1px solid #242a52}
+.tools{display:flex;gap:10px;margin-top:12px}
+table{width:100%;margin-top:10px;border-collapse:collapse;font-size:13px}
+td,th{padding:6px 8px;border-bottom:1px solid #242a52}
 </style>
 </head>
 
@@ -199,8 +92,13 @@ canvas{
         <div class="value" id="squintText">Not set</div>
       </div>
 
-      <div class="status">
-        All of your facial information is being sent to the Chinese Communist Party, act naturally.
+      <div class="metric">
+        <div class="label">Session Quality</div>
+        <div class="value" id="qualityText" class="info">Evaluating…</div>
+      </div>
+
+      <div class="status" id="privacyNote">
+        Data is stored locally on this device. You can export or delete it anytime.
       </div>
     </div>
   </div>
@@ -209,24 +107,39 @@ canvas{
 <section id="graphs">
   <div class="card">
     <h3>Stored Sessions</h3>
+
+    <div class="tools">
+      <button id="exportBtn">Export Data</button>
+      <button id="importBtn">Import Data</button>
+      <button id="deleteBtn">Delete All</button>
+    </div>
+
+    <small id="baselineStatus"></small>
+
     <canvas id="graphCanvas" width="820" height="420"></canvas>
+
+    <h4>Session Log</h4>
+    <table id="sessionTable">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Duration</th>
+          <th>Mean BPM</th>
+          <th>Std</th>
+          <th>Valid Minutes</th>
+          <th>Trend</th>
+          <th>Flag</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
 </section>
 
 </main>
 
-<!-- DISCLAIMER MODAL -->
-<div id="disclaimerOverlay">
-  <div id="disclaimerBox">
-    <h3>⚠️ Persistent Blink Reduction Detected</h3>
-    <p>Your blink rate has been reduced by <strong>30% or more</strong> across multiple days.</p>
-    <p>This may be associated with eye strain, dehydration, fatigue, or neurological/ophthalmic factors.</p>
-    <p>This software is <strong>not a medical device</strong> and does not provide diagnosis. Consider breaks, ergonomic changes, or consulting a healthcare professional.</p>
-    <button id="disclaimerOk">I Understand</button>
-  </div>
-</div>
-
 <script>
+/* --- ORIGINAL CONSTANTS + ALGORITHM VALUES (unchanged) --- */
 const CAL_TIME = 5000;
 const SQUINT_TIME = 5000;
 const EAR_WINDOW = 5;
@@ -248,7 +161,25 @@ let lastBlinkEnd=0;
 let squintCalibrating=false, squintStart=null;
 let squintEARs=[], squintFloor=null;
 
-const session={id:new Date().toISOString(),bpmSamples:[]};
+/* --- NEW LONGITUDINAL DATA MODEL --- */
+
+const BASELINE_REQUIRED_SESSIONS = 5;
+const MIN_SESSION_MINUTES = 2;          // must last ≥2 minutes
+const MIN_VALID_MINUTE_FRACTION = 0.6;  // must have >=60% valid minutes
+const WATCH_DROP = 0.15;
+const STRONG_DROP = 0.30;
+
+const session = {
+  id: new Date().toISOString(),
+  startedAt: Date.now(),
+  bpmSamples: [],
+  quality: "pending",
+  durationMs: 0,
+  meanBPM: 0,
+  stdBPM: 0,
+  validMinutes: 0,
+  notes: ""
+};
 
 const video=document.getElementById("video");
 const statusText=document.getElementById("statusText");
@@ -257,11 +188,13 @@ const eyeState=document.getElementById("eyeState");
 const bpmText=document.getElementById("bpmText");
 const squintText=document.getElementById("squintText");
 const squintBtn=document.getElementById("squintBtn");
+const qualityText=document.getElementById("qualityText");
 
 const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
 const std=(a,m)=>Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/a.length);
 
+/* --- ORIGINAL EAR + BLINK ALGORITHM (unchanged) --- */
 function normEAR(lm,idx){
   const v=d(lm[idx[1]],lm[idx[5]])+d(lm[idx[2]],lm[idx[4]]);
   const w=d(lm[idx[0]],lm[idx[3]]);
@@ -270,49 +203,104 @@ function normEAR(lm,idx){
 function smooth(buf,v,n){buf.push(v);if(buf.length>n)buf.shift();return avg(buf);}
 function zscore(v,buf){if(buf.length<10)return 0;const m=avg(buf),s=std(buf,m)||1e-6;return(v-m)/s;}
 
-function saveSession(){
-  const s=JSON.parse(localStorage.getItem("sessions")||"[]");
-  const i=s.findIndex(x=>x.id===session.id);
-  if(i===-1)s.push(session);else s[i]=session;
-  localStorage.setItem("sessions",JSON.stringify(s));
+/* --- STORAGE HELPERS --- */
+function loadSessions(){
+  return JSON.parse(localStorage.getItem("sessions") || "[]");
+}
+function storeSessions(list){
+  localStorage.setItem("sessions", JSON.stringify(list));
+}
+function upsertSession(s){
+  const list = loadSessions();
+  const i = list.findIndex(x=>x.id===s.id);
+  if(i===-1) list.push(s); else list[i]=s;
+  storeSessions(list);
 }
 
-/* === DISCLAIMER LOGIC (NO BLINK LOGIC CHANGES) === */
-const DISCLAIMER_THRESHOLD = 0.7;
-const DISCLAIMER_REQUIRED_DAYS = 3;
+/* --- SESSION QUALITY + SUMMARY COMPUTATION --- */
+function finalizeSession(){
+  session.durationMs = Date.now() - session.startedAt;
+  session.validMinutes = session.bpmSamples.length;
 
-const overlay=document.getElementById("disclaimerOverlay");
-document.getElementById("disclaimerOk").onclick=()=>overlay.style.display="none";
-
-function checkBlinkDisclaimer(){
-  const sessions=JSON.parse(localStorage.getItem("sessions")||"[]");
-  if(sessions.length<DISCLAIMER_REQUIRED_DAYS)return;
-
-  const daily={};
-  sessions.forEach(s=>{
-    const day=s.id.slice(0,10);
-    daily[day]??=[];
-    if(s.bpmSamples.length)daily[day].push(avg(s.bpmSamples));
-  });
-
-  const days=Object.keys(daily);
-  if(days.length<DISCLAIMER_REQUIRED_DAYS)return;
-
-  const baseline=avg(daily[days[0]]);
-  if(!baseline)return;
-
-  let reduced=0;
-  days.slice(1).forEach(d=>{
-    const v=avg(daily[d]);
-    if(v&&v<=baseline*DISCLAIMER_THRESHOLD)reduced++;
-  });
-
-  if(reduced>=DISCLAIMER_REQUIRED_DAYS&&!localStorage.getItem("blinkDisclaimerAck")){
-    overlay.style.display="flex";
-    localStorage.setItem("blinkDisclaimerAck","1");
+  if(session.validMinutes>0){
+    session.meanBPM = avg(session.bpmSamples);
+    session.stdBPM = std(session.bpmSamples,session.meanBPM);
   }
+
+  const minutes = session.durationMs / 60000;
+  const enoughDuration = minutes >= MIN_SESSION_MINUTES;
+  const enoughValid = (session.validMinutes / Math.max(1,Math.floor(minutes))) >= MIN_VALID_MINUTE_FRACTION;
+
+  session.quality = (enoughDuration && enoughValid) ? "usable" : "discarded";
+  qualityText.textContent = session.quality === "usable" ? "Usable" : "Low-confidence";
+  qualityText.className = session.quality === "usable" ? "good" : "warn";
+
+  upsertSession(session);
 }
 
+/* --- BASELINE + TREND LOGIC --- */
+function computeBaselineAndFlags(){
+  const sessions = loadSessions().filter(s=>s.quality==="usable");
+  const baselineStatus = document.getElementById("baselineStatus");
+
+  if(sessions.length < BASELINE_REQUIRED_SESSIONS){
+    baselineStatus.textContent =
+      `Baseline building — ${sessions.length}/${BASELINE_REQUIRED_SESSIONS} usable sessions`;
+    return { baseline:null, flags:[] };
+  }
+
+  const firstN = sessions.slice(0, BASELINE_REQUIRED_SESSIONS);
+  const baselineMean = avg(firstN.map(s=>s.meanBPM));
+  const baselineStd = std(firstN.map(s=>s.meanBPM), baselineMean) || 1e-6;
+
+  baselineStatus.textContent = `Baseline established — mean ${baselineMean.toFixed(1)} BPM`;
+
+  const flags = sessions.map(s=>{
+    const pctDrop = (baselineMean - s.meanBPM) / baselineMean;
+    const z = (s.meanBPM - baselineMean) / baselineStd;
+
+    let tier = "";
+    if(pctDrop >= STRONG_DROP) tier = "❗strong";
+    else if(pctDrop >= WATCH_DROP) tier = "⚠watch";
+
+    return {...s,pctDrop,z,tier};
+  });
+
+  return { baseline:{baselineMean,baselineStd}, flags };
+}
+
+/* --- EXPORT / IMPORT / DELETE --- */
+document.getElementById("exportBtn").onclick=()=>{
+  const data = localStorage.getItem("sessions") || "[]";
+  const blob = new Blob([data],{type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "blink_sessions.json";
+  a.click();
+};
+
+document.getElementById("importBtn").onclick=()=>{
+  const inp = document.createElement("input");
+  inp.type="file";
+  inp.accept="application/json";
+  inp.onchange=e=>{
+    const f=e.target.files[0];
+    if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{ localStorage.setItem("sessions",r.result); drawGraphs(); };
+    r.readAsText(f);
+  };
+  inp.click();
+};
+
+document.getElementById("deleteBtn").onclick=()=>{
+  if(confirm("Delete all stored sessions?")){
+    localStorage.removeItem("sessions");
+    drawGraphs();
+  }
+};
+
+/* --- SQUINT CALIBRATION LOGIC (unchanged behavior) --- */
 squintBtn.onmousedown=()=>{
   squintCalibrating=true;
   squintStart=Date.now();
@@ -320,7 +308,6 @@ squintBtn.onmousedown=()=>{
   squintBtn.classList.add("hold");
   statusText.textContent="Hold and squint gently…";
 };
-
 document.onmouseup=()=>{
   if(!squintCalibrating)return;
   squintCalibrating=false;
@@ -332,6 +319,7 @@ document.onmouseup=()=>{
   } else statusText.textContent="Squint calibration canceled";
 };
 
+/* --- MEDIAPIPE PIPELINE (blink algorithm untouched) --- */
 const fm=new FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
 fm.setOptions({maxNumFaces:1,refineLandmarks:true});
 
@@ -378,8 +366,7 @@ fm.onResults(r=>{
   if(now-minuteStart>=60000){
     session.bpmSamples.push(minuteCount);
     bpmText.textContent=minuteCount;
-    saveSession();
-    checkBlinkDisclaimer();
+    finalizeSession();       // <-- NEW
     minuteCount=0;
     minuteStart=now;
   }
@@ -387,6 +374,7 @@ fm.onResults(r=>{
 
 new Camera(video,{onFrame:async()=>fm.send({image:video}),width:640,height:480}).start();
 
+/* --- TAB + HISTORY VIEW --- */
 const tabLive=document.getElementById("tabLive");
 const tabGraphs=document.getElementById("tabGraphs");
 const live=document.getElementById("live");
@@ -395,34 +383,70 @@ const graphs=document.getElementById("graphs");
 tabLive.onclick=()=>{tabLive.classList.add("active");tabGraphs.classList.remove("active");live.classList.add("active");graphs.classList.remove("active");};
 tabGraphs.onclick=()=>{tabGraphs.classList.add("active");tabLive.classList.remove("active");graphs.classList.add("active");live.classList.remove("active");drawGraphs();};
 
+/* --- HISTORY GRAPH + TABLE --- */
 function drawGraphs(){
-  const c=document.getElementById("graphCanvas");
-  const g=c.getContext("2d");
+  const c = document.getElementById("graphCanvas");
+  const g = c.getContext("2d");
   g.clearRect(0,0,c.width,c.height);
 
-  const sessions=JSON.parse(localStorage.getItem("sessions")||"[]");
-  const m={l:50,r:20,t:20,b:50};
-  const w=c.width-m.l-m.r;
-  const h=c.height-m.t-m.b;
+  const {baseline,flags} = computeBaselineAndFlags();
+  const sessions = flags.length ? flags : loadSessions();
 
+  const usable = sessions.filter(s=>s.quality==="usable");
+  const margin = {left:50,right:20,top:20,bottom:50};
+  const width = c.width - margin.left - margin.right;
+  const height = c.height - margin.top - margin.bottom;
+
+  // axes
   g.strokeStyle="#666";
   g.beginPath();
-  g.moveTo(m.l,m.t);
-  g.lineTo(m.l,m.t+h);
-  g.lineTo(m.l+w,m.t+h);
+  g.moveTo(margin.left,margin.top);
+  g.lineTo(margin.left,margin.top+height);
+  g.lineTo(margin.left+width,margin.top+height);
   g.stroke();
 
-  let x=0;
-  sessions.forEach(s=>{
-    g.strokeStyle="#6b7cff";
+  // baseline band
+  if(baseline){
+    g.fillStyle="rgba(123,123,255,0.08)";
+    const hi = baseline.baselineMean + baseline.baselineStd;
+    const lo = baseline.baselineMean - baseline.baselineStd;
+    const yHi = margin.top+height - hi*5;
+    const yLo = margin.top+height - lo*5;
+    g.fillRect(margin.left,yHi,width,(yLo-yHi));
+  }
+
+  let x = margin.left+10;
+  const step = 22;
+
+  g.lineWidth=2;
+  usable.forEach(s=>{
+    g.strokeStyle = s.tier==="❗strong" ? "#ff9a9a"
+                    : s.tier==="⚠watch" ? "#ffd27a"
+                    : "#6b7cff";
     g.beginPath();
     s.bpmSamples.forEach((b,i)=>{
-      const px=m.l+x+i*20;
-      const py=m.t+h-b*5;
+      const px = x + i*step;
+      const py = margin.top+height - b*5;
       i?g.lineTo(px,py):g.moveTo(px,py);
     });
     g.stroke();
-    x+=s.bpmSamples.length*20+20;
+    x += s.bpmSamples.length*step + 25;
+  });
+
+  // update session table
+  const tbody=document.querySelector("#sessionTable tbody");
+  tbody.innerHTML="";
+  usable.forEach(s=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${new Date(s.id).toLocaleString()}</td>
+      <td>${(s.durationMs/60000).toFixed(1)}m</td>
+      <td>${s.meanBPM?.toFixed(1) || "-"}</td>
+      <td>${s.stdBPM?.toFixed(1) || "-"}</td>
+      <td>${s.validMinutes}</td>
+      <td>${(s.pctDrop?(-s.pctDrop*100).toFixed(0):"0")}%</td>
+      <td>${s.tier||""}</td>`;
+    tbody.appendChild(tr);
   });
 }
 </script>

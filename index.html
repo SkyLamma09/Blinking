@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Blink Monitor</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+<style>
+:root{
+  --bg:#0b0e14;
+  --panel:#141824;
+  --panel-soft:#1b2032;
+  --accent:#6b7cff;
+  --accent-2:#a277ff;
+  --good:#7dffb3;
+  --warn:#ff9a9a;
+  --text:#e6e8ff;
+  --muted:#9aa3c7;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:linear-gradient(180deg,#0b0e14,#0f1320);
+  color:var(--text);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto;
+}
+
+header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 20px;
+  background:rgba(20,24,36,.9);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid #22284a;
+}
+
+.nav{
+  display:flex;
+  gap:10px;
+}
+
+button{
+  background:var(--panel-soft);
+  border:1px solid #2a2f55;
+  color:var(--text);
+  padding:10px 16px;
+  border-radius:10px;
+  cursor:pointer;
+  font-size:14px;
+}
+
+button.active{background:var(--accent)}
+button.hold{background:var(--accent-2)}
+
+main{
+  padding:20px;
+  display:grid;
+  place-items:center;
+}
+
+section{display:none;max-width:900px;width:100%}
+section.active{display:block}
+
+.card{
+  background:var(--panel);
+  border:1px solid #242a52;
+  border-radius:16px;
+  padding:16px;
+  box-shadow:0 20px 50px rgba(0,0,0,.35);
+}
+
+.video-wrap{
+  display:grid;
+  grid-template-columns:640px 1fr;
+  gap:16px;
+}
+
+video{
+  border-radius:16px;
+  background:#000;
+}
+
+.metrics{
+  display:grid;
+  gap:12px;
+}
+
+.metric{
+  background:var(--panel-soft);
+  border-radius:12px;
+  padding:12px;
+}
+
+.metric .label{
+  color:var(--muted);
+  font-size:13px;
+}
+
+.metric .value{
+  font-size:26px;
+  margin-top:4px;
+}
+
+.good{color:var(--good)}
+.warn{color:var(--warn)}
+
+.status{
+  margin-top:8px;
+  font-size:14px;
+  color:var(--muted);
+}
+
+canvas{
+  background:var(--panel);
+  border-radius:16px;
+  border:1px solid #242a52;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="nav">
+    <button id="tabLive" class="active">Live</button>
+    <button id="tabGraphs">History</button>
+  </div>
+  <button id="squintBtn">Hold to Calibrate Squint</button>
+</header>
+
+<main>
+
+<section id="live" class="active">
+  <div class="card video-wrap">
+    <video id="video" autoplay muted playsinline width="640" height="480"></video>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="label">Status</div>
+        <div class="value" id="statusText">Initializing…</div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Eye State</div>
+        <div class="value" id="eyeState">—</div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Blink Rate</div>
+        <div class="value"><span id="bpmText">0</span> BPM</div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Normalized EAR</div>
+        <div class="value" id="earText">—</div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Squint Floor</div>
+        <div class="value" id="squintText">Not set</div>
+      </div>
+
+      <div class="status">
+        All of your facial information is being sent to the Chinese Communist Party, act naturally.
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="graphs">
+  <div class="card">
+    <h3>Stored Sessions</h3>
+    <canvas id="graphCanvas" width="820" height="420"></canvas>
+  </div>
+</section>
+
+</main>
+
+<script>
+/* ================= CONFIG ================= */
+const CAL_TIME = 5000;
+const SQUINT_TIME = 5000;
+const EAR_WINDOW = 5;
+const MIN_BLINK = 80;
+const MAX_BLINK = 500;
+const BASE_VEL_Z = 1.98;
+const MIN_OPEN_INTERVAL = 120;
+
+const LEFT=[33,160,158,133,153,144];
+const RIGHT=[362,385,387,263,373,380];
+
+/* ================= STATE ================= */
+let earBuf=[], velBuf=[], cal=[];
+let calibrated=false;
+let eyeClosed=false, blinkStart=null;
+let lastEAR=null, lastTime=null;
+let minuteCount=0, minuteStart=Date.now();
+let lastBlinkEnd=0;
+
+let squintCalibrating=false, squintStart=null;
+let squintEARs=[], squintFloor=null;
+
+const session={id:new Date().toISOString(),bpmSamples:[]};
+
+/* ================= DOM ================= */
+const video=document.getElementById("video");
+const statusText=document.getElementById("statusText");
+const earText=document.getElementById("earText");
+const eyeState=document.getElementById("eyeState");
+const bpmText=document.getElementById("bpmText");
+const squintText=document.getElementById("squintText");
+const squintBtn=document.getElementById("squintBtn");
+
+/* ================= UTILS ================= */
+const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
+const std=(a,m)=>Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/a.length);
+
+function normEAR(lm,idx){
+  const v=d(lm[idx[1]],lm[idx[5]])+d(lm[idx[2]],lm[idx[4]]);
+  const w=d(lm[idx[0]],lm[idx[3]]);
+  return v/(2*w);
+}
+function smooth(buf,v,n){buf.push(v);if(buf.length>n)buf.shift();return avg(buf);}
+function zscore(v,buf){if(buf.length<10)return 0;const m=avg(buf),s=std(buf,m)||1e-6;return(v-m)/s;}
+
+function saveSession(){
+  const s=JSON.parse(localStorage.getItem("sessions")||"[]");
+  const i=s.findIndex(x=>x.id===session.id);
+  if(i===-1)s.push(session);else s[i]=session;
+  localStorage.setItem("sessions",JSON.stringify(s));
+}
+
+/* ================= SQUINT BUTTON ================= */
+squintBtn.onmousedown=()=>{
+  squintCalibrating=true;
+  squintStart=Date.now();
+  squintEARs=[];
+  squintBtn.classList.add("hold");
+  statusText.textContent="Hold and squint gently…";
+};
+
+document.onmouseup=()=>{
+  if(!squintCalibrating)return;
+  squintCalibrating=false;
+  squintBtn.classList.remove("hold");
+  if(Date.now()-squintStart>=SQUINT_TIME){
+    squintFloor=avg(squintEARs);
+    squintText.textContent=squintFloor.toFixed(3);
+    statusText.textContent="Squint calibrated";
+  } else statusText.textContent="Squint calibration canceled";
+};
+
+/* ================= MEDIAPIPE ================= */
+const fm=new FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+fm.setOptions({maxNumFaces:1,refineLandmarks:true});
+
+fm.onResults(r=>{
+  if(!r.multiFaceLandmarks)return;
+  const lm=r.multiFaceLandmarks[0];
+
+  const ear=smooth(earBuf,(normEAR(lm,LEFT)+normEAR(lm,RIGHT))/2,EAR_WINDOW);
+  earText.textContent=ear.toFixed(3);
+  if(squintCalibrating)squintEARs.push(ear);
+
+  if(!calibrated){
+    cal.push(ear);
+    statusText.textContent="Calibrating neutral baseline…";
+    if(cal.length*33>=CAL_TIME){
+      calibrated=true;
+      statusText.textContent="Tracking";
+    }
+    return;
+  }
+
+  const now=Date.now();
+  let vel=lastEAR!==null?(lastEAR-ear)/(now-lastTime):0;
+  lastEAR=ear; lastTime=now;
+
+  velBuf.push(vel); if(velBuf.length>30)velBuf.shift();
+  let threshold=BASE_VEL_Z;
+  if(squintFloor&&ear>squintFloor*0.9)threshold+=0.8;
+
+  if(!eyeClosed){
+    if(zscore(vel,velBuf)>threshold){
+      eyeClosed=true; blinkStart=now; eyeState.textContent="Closed";
+    } else eyeState.textContent="Open";
+  } else if(zscore(vel,velBuf)<-1){
+    const dur=now-blinkStart;
+    if(dur>=MIN_BLINK&&dur<=MAX_BLINK&&blinkStart-lastBlinkEnd>=MIN_OPEN_INTERVAL){
+      minuteCount++;
+    }
+    lastBlinkEnd=now;
+    eyeClosed=false;
+    eyeState.textContent="Open";
+  }
+
+  if(now-minuteStart>=60000){
+    session.bpmSamples.push(minuteCount);
+    bpmText.textContent=minuteCount;
+    saveSession();
+    minuteCount=0;
+    minuteStart=now;
+  }
+});
+
+/* ================= CAMERA ================= */
+new Camera(video,{onFrame:async()=>fm.send({image:video}),width:640,height:480}).start();
+
+/* ================= NAV ================= */
+const tabLive=document.getElementById("tabLive");
+const tabGraphs=document.getElementById("tabGraphs");
+const live=document.getElementById("live");
+const graphs=document.getElementById("graphs");
+
+tabLive.onclick=()=>{tabLive.classList.add("active");tabGraphs.classList.remove("active");live.classList.add("active");graphs.classList.remove("active");};
+tabGraphs.onclick=()=>{tabGraphs.classList.add("active");tabLive.classList.remove("active");graphs.classList.add("active");live.classList.remove("active");drawGraphs();};
+
+function drawGraphs(){
+  const c = document.getElementById("graphCanvas");
+  const g = c.getContext("2d");
+  g.clearRect(0,0,c.width,c.height);
+
+  const sessions = JSON.parse(localStorage.getItem("sessions") || "[]");
+
+  const margin = {left:50, right:20, top:20, bottom:50};
+  const width = c.width - margin.left - margin.right;
+  const height = c.height - margin.top - margin.bottom;
+
+  /* ===== AXES ===== */
+  g.strokeStyle = "#666";
+  g.beginPath();
+  g.moveTo(margin.left, margin.top);
+  g.lineTo(margin.left, margin.top + height);
+  g.lineTo(margin.left + width, margin.top + height);
+  g.stroke();
+
+  /* ===== AXIS LABELS ===== */
+  g.fillStyle = "#9aa3c7";
+  g.font = "14px system-ui";
+
+  // Y-axis label
+  g.save();
+  g.translate(15, margin.top + height / 2);
+  g.rotate(-Math.PI / 2);
+  g.textAlign = "center";
+  g.fillText("Blink Rate (Blinks per Minute)", 0, 0);
+  g.restore();
+
+  // X-axis label
+  g.textAlign = "center";
+  g.fillText(
+    "Time (Minutes)",
+    margin.left + width / 2,
+    c.height - 15
+  );
+
+  /* ===== DATA ===== */
+  let xOffset = 0;
+  const xStep = 20;
+  const yScale = 5;
+
+  sessions.forEach(session=>{
+    g.strokeStyle = "#6b7cff";
+    g.beginPath();
+
+    session.bpmSamples.forEach((bpm,i)=>{
+      const x = margin.left + xOffset + i * xStep;
+      const y = margin.top + height - bpm * yScale;
+      i ? g.lineTo(x,y) : g.moveTo(x,y);
+    });
+
+    g.stroke();
+    xOffset += session.bpmSamples.length * xStep + 20;
+  });
+}
+</script>
+</body>
+</html>

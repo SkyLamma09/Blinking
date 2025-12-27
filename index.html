@@ -153,7 +153,9 @@ let earBuf=[], velBuf=[], cal=[];
 let calibrated=false;
 let eyeClosed=false, blinkStart=null;
 let lastEAR=null, lastTime=null;
-let minuteCount=0, minuteStart=Date.now();
+let minuteCount = 0;
+let minuteStart = Date.now();      // for BPM windows
+let calibrationStart = Date.now(); // for initial neutral calibration
 let lastBlinkEnd=0;
 let frameInFlight = false;
 let lastResultTime = Date.now();
@@ -352,10 +354,12 @@ function onResults(r){
   if(!calibrated){
     cal.push(ear);
     statusText.textContent = "Calibrating neutral baseline…";
-    if(Date.now() - minuteStart >= CAL_TIME){
+    if (Date.now() - calibrationStart >= CAL_TIME) {
       calibrated = true;
+      minuteStart = Date.now(); // reset BPM window cleanly
       statusText.textContent = "Tracking";
     }
+
     return;
   }
 
@@ -435,7 +439,7 @@ function restartPipeline(){
 }
 
 watchdogTimer = setInterval(()=>{
-  if(Date.now() - lastResultTime > 1200){
+  if(Date.now() - lastResultTime > 3000){
     restartPipeline();
   }
 }, 500);

@@ -49,7 +49,14 @@ video{
 
 .card{background:var(--panel);border:1px solid #242a52;border-radius:16px;padding:16px;box-shadow:0 20px 50px rgba(0,0,0,.35)}
 .video-wrap{display:grid;grid-template-columns:640px 1fr;gap:16px}
-video{border-radius:16px;background:#000}
+video {
+  opacity: 0;
+  transition: opacity .3s ease;
+}
+video.ready {
+  opacity: 1;
+}
+
 .metrics{display:grid;gap:12px}
 .metric{background:var(--panel-soft);border-radius:12px;padding:12px}
 .metric .label{color:var(--muted);font-size:13px}
@@ -203,6 +210,10 @@ const session = {
 };
 
 const video=document.getElementById("video");
+video.onloadeddata = () => {
+  video.classList.add("ready");
+};
+  
 const statusText=document.getElementById("statusText");
 const earText=document.getElementById("earText");
 const eyeState=document.getElementById("eyeState");
@@ -431,9 +442,12 @@ else if (zscore(vel, velBuf) < -1) {
 }
 
 function restartPipeline(){
+  if (!calibrated) return;
+
   try{
     camera?.stop();
     fm?.close();
+
   }catch(e){}
 
   frameInFlight = false;
@@ -461,10 +475,12 @@ let liveVisible = true;
 
 watchdogTimer = setInterval(() => {
   if (!liveVisible) return;
+  if (!calibrated) return;   // ⬅️ critical fix
   if (Date.now() - lastResultTime > 3000) {
     restartPipeline();
   }
 }, 500);
+
 
 camera = new Camera(video,{
   width:640,
